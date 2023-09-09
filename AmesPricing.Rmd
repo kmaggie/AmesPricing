@@ -1,0 +1,301 @@
+---
+title: "Predict Price for House in Ames, Iowa"
+author: "Maggie Kennedy"
+date: "9/28/2022"
+updated: "11/10/2022"
+output:
+  word_document: default
+  html_document:
+  df_print: paged
+  pdf_document: default
+---
+
+```{r message=FALSE, warning=FALSE}
+library(readr)
+library(car)
+library(corrplot) 
+library(leaps) 
+
+AmesTrain25 <- read_csv("/Users/maggie/Downloads/AmesTrain/AmesTrain25.csv",show_col_types = FALSE)
+sapply(AmesTrain25, is.numeric)
+head(AmesTrain25, 5)
+
+#is.numeric = TRUE indicates that the predictor is a quantitative variable, while FALSE indicates that it is qualitative
+```
+
+#_______________________________________________________________________________________________________________________________________________________________________
+
+#Part 1. Build an initial “basic” model using the quantitative variables in the dataset but should NOT use the categorical variables, transformations, or interactions
+
+
+```{r}
+Ames1 <- lm(Price~., data = AmesTrain25[c(2:4, 7:10, 17:19, 23:30, 32, 33, 35, 36, 39:42)])
+summary(Ames1)
+```
+
+#Exclude variables that are related or problematic:
+# Problematic numerical variables
+# _YearBuilt_ and _YearRemodel_ are actually categorical
+# _BasementSF_ = _BasementFinSF_ + _BasementUnFinSF_
+# _GroundSF_ = _FirstSF_ + _SecondSF_
+# _TotalRooms_ is the sum of all the rooms besides bathrooms
+# _GarageCars_ represent almost the same thing _GarageSF_ represent
+
+```{r}
+#creating a new model excluding all the related or problematic variables listed above
+Ames = lm(Price~LotFrontage+LotArea+Quality+Condition+
+            BasementFinSF+BasementUnFinSF+FirstSF+
+            SecondSF+BasementFBath+BasementHBath+
+            FullBath+HalfBath+Bedroom+Fireplaces+
+            GarageSF+WoodDeckSF+OpenPorchSF+
+            EnclosedPorchSF+ScreenPorchSF
+          , data=AmesTrain25)
+summary(Ames)
+plot(Ames) 
+
+# Residual standard error: 30.59 on 580 degrees of freedom
+# Multiple R-squared:    0.8571,	Adjusted R-squared:  0.8524 
+# F-statistic: 183.1 on 19 and 580 DF,  p-value: < 2.2e-16
+```
+
+```{r}
+vif(Ames)
+hist(Ames$residuals)
+```
+
+#Approximatetly 86% of the data is accounted for using this model by assessing only the quantitative predictors in the dataset as R^2 is 0.8571.
+
+
+#______________________________________________________________________________________________________________________________________________________________________
+#Selecting predictors using backward elimination
+
+
+```{r}
+BackAmes <- lm(Price~LotFrontage+LotArea+Quality+Condition+ BasementFinSF+BasementUnFinSF+FirstSF+SecondSF+BasementFBath+BasementHBath+FullBath+HalfBath+Bedroom+Fireplaces+GarageSF+WoodDeckSF+OpenPorchSF+EnclosedPorchSF+ScreenPorchSF, data=AmesTrain25)
+
+MSE = (summary(BackAmes)$sigma)^2
+
+step(BackAmes, scale=MSE)
+
+#lm(formula = Price ~ LotFrontage + LotArea + Quality + Condition + 
+#    BasementFinSF + BasementUnFinSF + FirstSF + SecondSF + BasementFBath + 
+#    FullBath + HalfBath + Bedroom + GarageSF + EnclosedPorchSF + 
+#    ScreenPorchSF, data = AmesTrain25)
+#cp =  16.147
+```
+
+```{r}
+BackAmes2 <- lm(Price ~ LotFrontage + LotArea + Quality + Condition + 
+    BasementFinSF + BasementUnFinSF + FirstSF + SecondSF + BasementFBath + 
+    FullBath + HalfBath + Bedroom + GarageSF + EnclosedPorchSF + 
+    ScreenPorchSF, data = AmesTrain25)
+summary(BackAmes2)
+
+#Residual standard error: 30.59 on 584 degrees of freedom
+#Multiple R-squared:  0.8561,	Adjusted R-squared:  0.8524 
+#F-statistic: 231.6 on 15 and 584 DF,  p-value: < 2.2e-16
+
+#The R^2 was 0.8524 for the intial linear model and 0.8524 for the model using backward elimination to select predictors, indicating that this is a good set of selectors.
+# + Among the predictors selected, __FullBath__ and __EnclosedPorchSF__ has a p-value > 5%
+```
+
+```{r}
+plot(BackAmes)
+vif(BackAmes2)
+#None of the VIF values are greater than 5, so issues with multicollinearity is unlikely
+```
+
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Using Forward Selection to select predictors
+
+```{r}
+none = lm(Price~1, data=AmesTrain25)
+
+step(none, scope=list(upper=BackAmes), scale=MSE, direction = "forward")
+
+#cp= 16.147
+#lm(formula = Price ~ Quality + FirstSF + SecondSF + BasementFinSF + 
+#    GarageSF + LotArea + Bedroom + BasementUnFinSF + ScreenPorchSF + 
+#    LotFrontage + EnclosedPorchSF + Condition + HalfBath + FullBath + 
+#    BasementFBath, data = AmesTrain25)
+```
+
+```{r}
+FowardAmes<- lm(formula = Price ~ Quality + FirstSF + SecondSF + BasementFinSF + 
+    GarageSF + LotArea + Bedroom + BasementUnFinSF + ScreenPorchSF + 
+    LotFrontage + EnclosedPorchSF + Condition + HalfBath + FullBath + 
+    BasementFBath, data = AmesTrain25)
+summary(FowardAmes)
+
+#Residual standard error: 30.59 on 584 degrees of freedom
+#Multiple R-squared:  0.8561,	Adjusted R-squared:  0.8524 
+#F-statistic: 231.6 on 15 and 584 DF,  p-value: < 2.2e-16
+```
+
+#R^2 is 0.8524 for the linear model using selectors from forward selection, indicating that is also a good selection of predictors
+#the p-value for__FullBath__ and __EnclosedPorchSF__ are greater than 5%, which was also shown from backward elimination
+
+```{r}
+plot(FowardAmes)
+vif(FowardAmes)
+#None of the VIF values are greater than 5, so issues with multicollinearity is unlikely
+```
+
+
+#______________________________________________________________________________________________________________________________________________________________________
+
+#Chosen Set of Predictors:
+#    Quality + FirstSF + SecondSF + BasementFinSF + 
+#    GarageSF + LotArea + Bedroom + BasementUnFinSF + ScreenPorchSF + 
+#    LotFrontage + EnclosedPorchSF + Condition + HalfBath + FullBath + 
+#    BasementFBath
+
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#Part 2 Residual Analysis for chosen predictors
+
+```{r}
+plot(FowardAmes, 1:2)
+summary(FowardAmes)
+```
+
+### Assumptions:
+
+# + Linearity:
+#   - Looking at Residual vs. Fitted plot, the red line is curved
+# - Problematic
+# 
+# + Zero Mean:
+#   - Always Fit by the nature of the model
+# 
+# + Constant Variance:
+#   - Looking at Residual vs. Fitted plot, some fanning patterns towards the right
+# - Problematic
+# 
+# + Normality
+# - Looking at qq plot, the data fit this line
+# - But right tail is slightly above the line, could be problematic
+# 
+# + Independence
+# - Looking at Residual vs. Fitted plot, the curve pattern
+# - Problematic
+
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Standardized and Studenized Residuals 
+
+```{r}
+head(sort(FowardAmes$residuals, decreasing=TRUE), n=20)
+
+#      222       234       404       497       168       149       224       547 
+#      206.08566 163.67206 146.85780 135.56432 111.58957  93.47411  88.26349  83.11923 
+#      100       445       170       447         8       318       509       378 
+#      79.97382  75.21775  73.25101  70.18449  68.97153  68.78122  68.61686  66.76346 
+#      517       118       442        43 
+#      57.58570  57.58247  57.40210  56.29330 
+```
+
+```{r}
+rstandard(FowardAmes)[c(222,234,404,497,168,149,224,547, 100, 445, 170)]
+
+#     222      234      404      497      168      149      224      547      100 
+#     6.875850 5.643810 4.866155 4.460166 3.704899 3.109189 2.929719 2.781904 2.652133 
+#     445      170 
+#     2.498884 2.423463 
+```
+
+```{r}
+rstudent(FowardAmes)[c(222,234,404,497,168,149,224,547, 100, 445, 170)]
+
+#     222      234      404      497      168      149      224      547      100 
+#     7.166146 5.799347 4.963659 4.534241 3.746011 3.132561 2.948961 2.798123 2.665965 
+#     445      170 
+#     2.510200 2.433656 
+```
+
+#Entries 222, 234, 404, 497, 168 and 149 appear to be influential and may possibly be outliers because their standardized and studentized residuals are higher than an absolute value of 3. 
+
+
+#Subset of AmesTrain25, the original dataset, without these problematic values
+```{r}
+Ames_res <- AmesTrain25[-c(222, 234, 404, 497, 168, 149),]
+```
+
+```{r}
+ModAmes <- lm(Price ~  Quality + FirstSF + SecondSF + BasementFinSF + 
+    GarageSF + LotArea + Bedroom + BasementUnFinSF + ScreenPorchSF + 
+    LotFrontage + EnclosedPorchSF + Condition + HalfBath + FullBath + 
+    BasementFBath, data = Ames_res)
+summary(ModAmes)
+plot(ModAmes, 1:2)
+
+#Residual standard error: 26.38 on 578 degrees of freedom
+#Multiple R-squared:  0.8739,	Adjusted R-squared:  0.8706 
+#F-statistic: 266.9 on 15 and 578 DF,  p-value: < 2.2e-16
+```
+#After excluding entries with high standarized and studentized residuals, R^2 increased from 0.8524 to 0.8706. Based on p-values, it appears that __BasementFBath__, __HalfBath__ and __ScreenPorthSF__ are practically insignificant in this model. There also remains issues ptertaining to the regression conditions for linearity and normality.
+
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#Leverages
+# predictors = 15
+#samples = 600
+
+```{r}
+2*(17/600) #[1] 0.05666667
+3*(17/600) #[1] 0.085
+```
+
+```{r}
+head(sort(hatvalues(FowardAmes), decreasing = TRUE),20)
+
+#       406        499         92        102        234        360        394 
+#     0.55003735 0.31577810 0.10625064 0.10537891 0.10118537 0.10069521 0.10063118 
+#       434        310        117        175        321          8         15 
+#     0.09966905 0.08912317 0.08101709 0.08099065 0.07741399 0.07596716 0.07316170 
+#       304        446        498        299        479        496 
+#     0.07205400 0.07158165 0.07102450 0.06697588 0.06460385 0.06452111 
+```
+
+#Leverage is the measure of how  far an observation is from the mean of the predictor value. Higher predictors have a higher chnace of influencing the model or being outliters. Entries 406, 199, 92, 102, 234, 360, 394, 434 and 310 have high leverages and therefore may be influential.
+
+#subset of AmesTrain25, the original dataset, without these problematic values
+
+```{r}
+Ames_Lev <- AmesTrain25[-c(406, 199, 92, 102, 234, 360, 394, 434, 310),]
+```
+
+```{r}
+ModAmes2 = lm(Price~  Quality + FirstSF + SecondSF + BasementFinSF + 
+    GarageSF + LotArea + Bedroom + BasementUnFinSF + ScreenPorchSF + 
+    LotFrontage + EnclosedPorchSF + Condition + HalfBath + FullBath + 
+    BasementFBath, data = Ames_Lev)
+summary(ModAmes2)
+plot(ModAmes2)
+
+#Residual standard error: 29.58 on 575 degrees of freedom
+#Multiple R-squared:  0.858,	Adjusted R-squared:  0.8543 
+#F-statistic: 231.6 on 15 and 575 DF,  p-value: < 2.2e-16
+```
+#After excluding entries with high leverage, R^2 increased from 0.8524 to 0.8543, however it must be noted that it is lower than the R^2 from ommitting high standardized/studentized residuals. Based on p-values, it appears that __BasementFBath__, __HalfBath__ and __ScreenPorthSF__ are practically insignificant in this model. There also remains issues ptertaining to the regression conditions for linearity and normality. There remains dramatic outliers from entries 397, 488 and 219.
+
+#----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#Subset of AmesTrain25 without values of high standardized/studentized residuals and high leverage
+
+```{r}
+Amessub <- AmesTrain25[-c(406, 199, 92, 102, 234, 360, 394, 434, 310, 222, 234, 404, 497, 168, 149),]
+
+ModAmes3 <- lm(Price ~ Quality + FirstSF + SecondSF + BasementFinSF + 
+    GarageSF + LotArea + Bedroom + BasementUnFinSF + ScreenPorchSF + 
+    LotFrontage + EnclosedPorchSF + Condition + HalfBath + FullBath + 
+    BasementFBath, data = Amessub)
+summary(ModAmes3)
+plot(ModAmes3)
+
+#Residual standard error: 26.15 on 570 degrees of freedom
+#Multiple R-squared:  0.8743,	Adjusted R-squared:  0.871 
+#F-statistic: 264.3 on 15 and 570 DF,  p-value: < 2.2e-16
+
+```
+
+###Conclusion: After ommmitting the values with high standardized/studentized residuals high leverage, there appears to still be some issues with linearity, independence and normality. However, R^2 increased dramatically from 0.854 before to 0.871 now, indicating that this is the best model for the data thus far. Transformations may aide in fitting the data further.  
